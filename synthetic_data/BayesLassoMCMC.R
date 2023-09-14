@@ -1,8 +1,14 @@
 library("BayesianGLasso")
+library("glasso")
 
 BlockMCMC <- function (X, n_iter, burnin){
     BayesGLasso <- blockGLasso(X=X, iterations=n_iter, burnIn=burnin, lambdaPriora=1, lambdaPriorb=.1)
     return (BayesGLasso)
+}
+
+GLassoPath <- function(S, rholist, diagonal){
+    path <- glassopath(s=S, rholist=rholist, thr=1.0e-4, maxit=1e4, approx=FALSE, penalize.diagonal=diagonal, w.init=NULL,wi.init=NULL, trace=1)
+    return (path)
 }
 
 inverseGaussian <- function(mu, lambda) {

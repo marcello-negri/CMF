@@ -189,13 +189,18 @@ def log_prior_generalized_normal(W: torch.Tensor, lamb_exp: torch.Tensor, p: tor
 
     p_reshaped_W = p.view(-1, *len(W_tril.shape[1:]) * (1,))  # (-1, 1, 1)
     W_tril_p = (W_tril.abs() + eps).pow(p_reshaped_W).sum(-1)
-    log_prior_gen_norm = - lamb * W_tril_p
+
+    W_diag = torch.diagonal(W, dim1=-2, dim2=-1) # diagonal elements with 0.5 lambda regularization
+    W_diag_p = (W_diag.abs() + eps).sum(-1)  # .pow(p_reshaped_W).sum(-1)
+
+    log_prior_gen_norm = - lamb * W_tril_p - 0.5 * lamb * W_diag_p
 
     # compute normalization constant
     if torch.any(torch.isnan(log_prior_gen_norm)): breakpoint()
     norm_const = (0.5 * p).log() + lamb.log() / p - torch.lgamma(1. / p)
+    norm_const_diag = (0.5 * p).log() + (0.5*lamb).log() / p - torch.lgamma(1. / p)
     if torch.any(torch.isnan(norm_const)): breakpoint()
-    log_const = n_elements * norm_const
+    log_const = n_elements * norm_const + W.shape[-1] * norm_const_diag
 
     return log_prior_gen_norm + log_const
 

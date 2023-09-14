@@ -16,6 +16,11 @@ rpy2.robjects.numpy2ri.activate()
 from gglasso.solver.single_admm_solver import ADMM_SGL
 from sklearn.covariance import graphical_lasso, GraphicalLassoCV
 
+r = robjects.r
+r['source']('BayesLassoMCMC.R')
+glasso_path = robjects.globalenv['GLassoPath']
+bayes_lasso = robjects.globalenv['Bayes.glasso.MB']
+
 def plot_adjacency_matrix(edge_weights, ax=None) -> None:
 
     graph = nx.from_numpy_array(edge_weights)
@@ -251,7 +256,10 @@ def plot_W_comparison(W_flow, W_sklearn, lambdas, p, T, conf=0.95, off_diagonal=
             plt.locator_params(axis='y', nbins=4)
             plt.xticks(fontsize=12)
             plt.yticks(fontsize=12)
-            plt.savefig(f"{folder_name}W_lambda_p{p.item():.2f}_T{T:.3f}_{i}.pdf", bbox_inches='tight')
+            if off_diagonal:
+                plt.savefig(f"{folder_name}W_lambda_p{p.item():.2f}_T{T:.3f}_off_{i}.pdf", bbox_inches='tight')
+            else:
+                plt.savefig(f"{folder_name}W_lambda_p{p.item():.2f}_T{T:.3f}_{i}.pdf", bbox_inches='tight')
             # plt.show()
             plt.close()
 
@@ -305,20 +313,20 @@ def plot_W_fixed_p (flow, S, p, T, lamb_min, lamb_max, X_train, n_plots=3, n_ite
     p_value = p.detach().cpu().numpy()
 
     alpha_sorted = lambda_sorted * 2 / n
-    W_sklearn = np.array([ADMM_SGL(S.detach().cpu().numpy(), lamb * 0.5, np.eye(S.shape[0]), max_iter=1000)[0]['Theta'] for lamb in tqdm.tqdm(alpha_sorted)])
+    # W_sklearn = np.array([ADMM_SGL(S.detach().cpu().numpy(), lamb * 0.5, np.eye(S.shape[0]), max_iter=1000)[0]['Theta'] for lamb in tqdm.tqdm(alpha_sorted)])
+    W_glasso = glasso_path(S.detach().cpu().numpy(), alpha_sorted * 0.5, diagonal=True)[1]  # (args.d, args.d, n_lambdas)
+    W_glasso = np.moveaxis(W_glasso, 2, 0)  # (n_lambdas, args.d, args.d)
     # W_sklearn = np.array([graphical_lasso(emp_cov=S.detach().cpu().numpy(), alpha=lamb * 0.5)[1] for lamb in tqdm.tqdm(alpha_sorted)])
 
     # print('Diagonal elements')
     # MSE = plot_W_comparison(W_mean, W_std, W_sklearn, alpha_sorted, p=p_value, T=T, off_diagonal=False, n_plots=n_plots)
     print('Off-diagonal elements')
-    MSE = plot_W_comparison(samples, W_sklearn, alpha_sorted, p=p_value, T=T, off_diagonal=True, n_plots=n_plots)
+    MSE = plot_W_comparison(samples, W_glasso, alpha_sorted, p=p_value, T=T, off_diagonal=False, n_plots=3)
+    MSE = plot_W_comparison(samples, W_glasso, alpha_sorted, p=p_value, T=T, off_diagonal=True, n_plots=n_plots)
 
     return MSE
 
 def plot_W_bayes_lasso (S, lamb_min, lamb_max, X_train, n_lambdas=100, burnin = 1000, n_iter = 2000, n_plots=3):
-    r = robjects.r
-    r['source']('BayesLassoMCMC.R')  # Loading the function we have defined in R.
-    bayes_lasso = robjects.globalenv['Bayes.glasso.MB']  # Reading and processing data
     lambdas = np.logspace(lamb_min, lamb_max, n_lambdas)
     n = X_train.shape[0]
     d = X_train.shape[-1]
@@ -326,16 +334,15 @@ def plot_W_bayes_lasso (S, lamb_min, lamb_max, X_train, n_lambdas=100, burnin = 
     samples = np.array(samples)
 
     alpha_sorted = lambdas * 2 / n
-    W_sklearn = np.array([ADMM_SGL(S, lamb * 0.5, np.eye(S.shape[0]), max_iter=1000)[0]['Theta'] for lamb in tqdm.tqdm(alpha_sorted)])
+    # W_sklearn = np.array([ADMM_SGL(S, lamb * 0.5, np.eye(S.shape[0]), max_iter=1000)[0]['Theta'] for lamb in tqdm.tqdm(alpha_sorted)])
+    W_glasso = glasso_path(S, alpha_sorted * 0.5, diagonal=True)[1]  # (args.d, args.d, n_lambdas)
+    W_glasso = np.moveaxis(W_glasso, 2, 0)  # (n_lambdas, args.d, args.d)
     print('Off-diagonal elements')
-    MSE = plot_W_comparison(samples, W_sklearn, alpha_sorted, p=np.array(1), T=1, off_diagonal=True, n_plots=n_plots, folder_name='./plots_bayes/')
+    MSE = plot_W_comparison(samples, W_glasso, alpha_sorted, p=np.array(1), T=1, off_diagonal=False, n_plots=n_plots, folder_name='./plots_bayes/')
 
     return MSE
 
 def box_plot_comparison (S, lamb_min, lamb_max, X_train, p_min=0.25, p_max=1.25, epochs=2000, n_lambdas=10, burnin = 1000, n_iter = 2000, n_plots=3, seed=1234):
-    r = robjects.r
-    r['source']('BayesLassoMCMC.R')  # Loading the function we have defined in R.
-    bayes_lasso = robjects.globalenv['Bayes.glasso.MB']  # Reading and processing data
     lambdas = np.logspace(lamb_min, lamb_max, n_lambdas)
     n, d = X_train.shape
     # bayesian lasso
@@ -343,8 +350,10 @@ def box_plot_comparison (S, lamb_min, lamb_max, X_train, p_min=0.25, p_max=1.25,
     samples_blasso = np.array(samples_blasso)
 
     # lasso path
-    alpha_sorted = lambdas * 2 / n
-    samples_sklearn = np.array([ADMM_SGL(S, lamb * 0.5, np.eye(S.shape[0]), max_iter=1000)[0]['Theta'] for lamb in tqdm.tqdm(alpha_sorted)])
+    # alpha_sorted = lambdas * 2 / n
+    # samples_sklearn = np.array([ADMM_SGL(S, lamb * 0.5, np.eye(S.shape[0]), max_iter=1000)[0]['Theta'] for lamb in tqdm.tqdm(alpha_sorted)])
+    W_glasso = glasso_path(S, lambdas * 2 / n * 0.5, diagonal=True)[1]  # (args.d, args.d, n_lambdas)
+    W_glasso = np.moveaxis(W_glasso, 2, 0)  # (n_lambdas, args.d, args.d)
 
     # flow
     file_name = f'd{d}_n{n}_e{epochs}_pmin{p_min}_pmax{p_max}_lmin{lamb_min}_lmax{lamb_max}_seed{seed}_T1.000'
@@ -364,7 +373,7 @@ def box_plot_comparison (S, lamb_min, lamb_max, X_train, p_min=0.25, p_max=1.25,
 
     # create boxplot
     lambda_names = [f"{i:.1f}" for i in lambdas]
-    for i in range(0,d,3):
+    for i in range(0,d,2):
         for j in range(i,d,2):
             plt.figure(figsize=(14,7))
             bayes_lasso_df = pd.DataFrame(samples_blasso[...,i,j].T, columns=lambda_names).assign(model="bayes lasso")
@@ -375,7 +384,7 @@ def box_plot_comparison (S, lamb_min, lamb_max, X_train, p_min=0.25, p_max=1.25,
             cdf = pd.concat([bayes_lasso_df, flow_p100_df, flow_p075_df, flow_p050_df, flow_p025_df])
             mdf = pd.melt(cdf, id_vars=['model'], var_name=r'$\lambda$', value_name=r"$\beta$")
             sns.boxplot(x=r'$\lambda$', y=r"$\beta$", hue="model", data=mdf)
-            plt.scatter(range(0,n_lambdas),samples_sklearn[...,i,j], marker='x', s=100, c='r', label='glasso')
+            plt.scatter(range(0,n_lambdas),W_glasso[...,i,j], marker='x', s=100, c='r', label='glasso')
             plt.legend()
             plt.savefig(f"./plots/box_plot_{i}_{j}.pdf", bbox_inches='tight')
             plt.close()
