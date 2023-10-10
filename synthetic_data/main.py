@@ -2,6 +2,7 @@ from scipy import stats
 import numpy as np
 import scipy as sp
 import torch
+import os
 from sklearn.datasets import make_sparse_spd_matrix
 import utils_mcf, utils_plot
 import argparse
@@ -13,7 +14,7 @@ parser.add_argument('--n', metavar='n', type=int, default=15,
                     help='number of samples')
 parser.add_argument('--epochs', metavar='e', type=int, default=10000,
                     help='number of epochs')
-parser.add_argument('--seed', metavar='s', type=int, default=1234,
+parser.add_argument('--seed', metavar='s', type=int, default=1,
                     help='random seed')
 
 args = parser.parse_args()
@@ -27,7 +28,7 @@ def main():
     set_random_seeds(args.seed)
 
     # generate precision matrix:
-    W = make_sparse_spd_matrix(args.d, alpha=0.9, random_state=2)
+    W = make_sparse_spd_matrix(args.d, alpha=0.9, random_state=2, smallest_coef=0.1, largest_coef=0.9)
 
     # generate observations from gaussian distribution
     cov = sp.linalg.inv(W)
@@ -44,7 +45,7 @@ def main():
     # prec_gl = utils_plot.glasso_solution(S, W, alpha=1e1 * 2 / args.n)
 
     # check lambda range by plotting GLasso solution
-    lamb_min_exp, lamb_max_exp = 0, 2
+    lamb_min_exp, lamb_max_exp = -0.5, 1
     utils_plot.plot_GLasso_solution(S, args.d, args.n, lamb_min_exp, lamb_max_exp, n_points=100, solver='gglasso')
 
     # n_plots = 20
@@ -54,31 +55,36 @@ def main():
     # Build Conditional Matrix Flow
     S_torch = torch.from_numpy(S).float().cuda()
     matrix_dim = S_torch.shape[0]
-    flow = utils_mcf.build_positive_definite_vector(matrix_dim, context_features=128, hidden_features=256, n_layers=10)
+    flow = utils_mcf.build_positive_definite_vector(matrix_dim, context_features=64, hidden_features=256, n_layers=10)
 
     # train model
     p_min, p_max = .25, 1.25
-    T0, Tn = 10, 1e-3
-    flow, loss, loss_T = utils_mcf.train_model(flow, S_torch, X, d=args.d, n=args.n, lr=1e-3, epochs=args.epochs, context_size=1_000, p_min=p_min, p_max=p_max,
-                                               lambda_min_exp=lamb_min_exp, lambda_max_exp=lamb_max_exp, T0=T0, Tn=Tn, iter_per_cool_step=100, seed=args.seed)
+    T0, Tn = 5, 1
 
-    # plot loss function
-    utils_plot.plot_loss(loss, loss_T)
+    file_name = f'd{args.d}_n{args.n}_e{args.epochs}_pmin{p_min}_pmax{p_max}_lmin{lamb_min_exp}_lmax{lamb_max_exp}_seed{args.seed}_T{Tn:.3f}'
+    if os.path.isfile(f"./models/cmf_{file_name}"):
+        flow.load_state_dict(torch.load(f"./models/cmf_{file_name}"))
+    else:
+        flow, loss, loss_T = utils_mcf.train_model(flow, S_torch, X, d=args.d, n=args.n, lr=1e-3, epochs=args.epochs, context_size=1_000, p_min=p_min, p_max=p_max,
+                                                   lambda_min_exp=lamb_min_exp, lambda_max_exp=lamb_max_exp, T0=T0, Tn=Tn, iter_per_cool_step=100, seed=args.seed)
+        # plot loss function
+        utils_plot.plot_loss(loss, loss_T)
 
     # plot MAP for different l_p norms
     n_plots = 10
     p = torch.tensor(1.).cuda() # Lasso solution
-    MSE_flow = utils_plot.plot_W_fixed_p(flow, S_torch, p=p, T=Tn, lamb_min=lamb_min_exp, lamb_max=lamb_max_exp, X_train=X, n_plots=n_plots)
+    MSE_flow = utils_plot.plot_W_fixed_p(flow, S_torch, p=p, T=Tn, lamb_min=lamb_min_exp, lamb_max=lamb_max_exp, X_train=X, n_plots=n_plots, n_iter=200, sample_size=1000)
 
 
-    sub_l1 = [0.75, 0.5, 0.25] # sub-l1 pseudo-norms
-    for i in sub_l1:
-        print(f"p = {i}")
-        utils_plot.plot_W_fixed_p(flow, S_torch, p=p * i, T=Tn, lamb_min=lamb_min_exp, lamb_max=lamb_max_exp, X_train=X, n_plots=n_plots)
+    # sub_l1 = [0.75, 0.5, 0.25] # sub-l1 pseudo-norms
+    # for i in sub_l1:
+    #     print(f"p = {i}")
+    #     utils_plot.plot_W_fixed_p(flow, S_torch, p=p * i, T=Tn, lamb_min=lamb_min_exp, lamb_max=lamb_max_exp, X_train=X, n_plots=n_plots, n_iter=200)
 
-    utils_plot.box_plot_comparison(S, lamb_min_exp, lamb_max_exp, X, p_min=p_min, p_max=p_max, epochs=5000, n_lambdas=10, burnin=1000,
-                        n_iter=2000, n_plots=3, seed=args.seed)
+    # utils_plot.box_plot_comparison(S, lamb_min_exp, lamb_max_exp, X, p_min=p_min, p_max=p_max, epochs=args.epochs, n_lambdas=4, burnin=1000,
+    #                                n_iter=2000, n_plots=3, seed=args.seed)
 
+    breakpoint()
 
 if __name__ == "__main__":
     main()

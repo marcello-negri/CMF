@@ -21,6 +21,9 @@ r['source']('BayesLassoMCMC.R')
 glasso_path = robjects.globalenv['GLassoPath']
 bayes_lasso = robjects.globalenv['Bayes.glasso.MB']
 
+# sns.set_style("whitegrid")
+sns.set_theme(style="whitegrid")
+
 def plot_adjacency_matrix(edge_weights, ax=None) -> None:
 
     graph = nx.from_numpy_array(edge_weights)
@@ -38,7 +41,6 @@ def plot_adjacency_matrix(edge_weights, ax=None) -> None:
       ax.set_aspect('equal')
 
 def plot_W_gt (W):
-    sns.set_style("white")
     fig, axs = plt.subplots(1, 2, figsize=(13, 5))
     im = axs[0].imshow(np.sign(W), cmap=mpl.colors.ListedColormap(['white', "gray", 'black']))
     axs[0].set_ylabel("Sign of Matrix Entry")
@@ -240,7 +242,7 @@ def plot_W_comparison(W_flow, W_sklearn, lambdas, p, T, conf=0.95, off_diagonal=
     n_lines = W_tril_mean.shape[1] // n_plots
     clrs = sns.color_palette("husl", n_lines)
     for i in range(n_plots):
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=[6.4, 4.8])
         with sns.axes_style("darkgrid"):
             for j in range(i * n_lines, (i + 1) * n_lines):
                 if j == W_tril_mean.shape[1]:
@@ -248,14 +250,14 @@ def plot_W_comparison(W_flow, W_sklearn, lambdas, p, T, conf=0.95, off_diagonal=
                 color = clrs[j % n_lines]
                 ax.plot(lambdas, W_tril_mean[:, j], c=color, alpha=0.7, linewidth=1.5)
                 ax.fill_between(lambdas, W_tril_l[:,j], W_tril_r[:,j], alpha=0.2, facecolor=color)
-                ax.plot(lambdas, W_tril_sklearn[:, j], linestyle='--', linewidth=1.5, c=color, alpha=0.7)
+                ax.plot(lambdas, W_tril_sklearn[:, j], linestyle='--', linewidth=1.5, c=color, alpha=0.3)
 
             ax.set_xscale('log')
             plt.xlabel(r'$\lambda$', fontsize=18)
             plt.ylabel(r'$\Omega$', fontsize=18)
-            plt.locator_params(axis='y', nbins=4)
+            # ax.locator_params(axis='y', nbins=4)
             plt.xticks(fontsize=12)
-            plt.yticks(fontsize=12)
+            plt.yticks([0.0,2.0], fontsize=12)
             if off_diagonal:
                 plt.savefig(f"{folder_name}W_lambda_p{p.item():.2f}_T{T:.3f}_off_{i}.pdf", bbox_inches='tight')
             else:
@@ -302,11 +304,11 @@ def plot_W_comparison(W_flow, W_sklearn, lambdas, p, T, conf=0.95, off_diagonal=
 
     return MSE_lambda
 
-def plot_W_fixed_p (flow, S, p, T, lamb_min, lamb_max, X_train, n_plots=3, n_iter=50):
+def plot_W_fixed_p (flow, S, p, T, lamb_min, lamb_max, X_train, n_plots=3, n_iter=50, sample_size=1000):
     n = X_train.shape[0]
     samples, kl_mean, kl_T_mean, kl_std, kl_T_std, W_mean, W_std, lambda_sorted = utils_mcf.sample_W_fixed_p(flow, S, p=p, n=n,
                                                                                                    T=T, context_size=2,
-                                                                                                   sample_size=100,
+                                                                                                   sample_size=sample_size,
                                                                                                    n_iter=n_iter,
                                                                                                    lambda_min_exp=lamb_min,
                                                                                                    lambda_max_exp=lamb_max)
@@ -321,8 +323,8 @@ def plot_W_fixed_p (flow, S, p, T, lamb_min, lamb_max, X_train, n_plots=3, n_ite
     # print('Diagonal elements')
     # MSE = plot_W_comparison(W_mean, W_std, W_sklearn, alpha_sorted, p=p_value, T=T, off_diagonal=False, n_plots=n_plots)
     print('Off-diagonal elements')
-    MSE = plot_W_comparison(samples, W_glasso, alpha_sorted, p=p_value, T=T, off_diagonal=False, n_plots=3)
-    MSE = plot_W_comparison(samples, W_glasso, alpha_sorted, p=p_value, T=T, off_diagonal=True, n_plots=n_plots)
+    MSE = plot_W_comparison(samples, W_glasso, lambda_sorted, p=p_value, T=T, off_diagonal=False, conf=0.75, n_plots=3)
+    MSE = plot_W_comparison(samples, W_glasso, lambda_sorted, p=p_value, T=T, off_diagonal=True, conf=0.75, n_plots=n_plots)
 
     return MSE
 
@@ -357,7 +359,7 @@ def box_plot_comparison (S, lamb_min, lamb_max, X_train, p_min=0.25, p_max=1.25,
 
     # flow
     file_name = f'd{d}_n{n}_e{epochs}_pmin{p_min}_pmax{p_max}_lmin{lamb_min}_lmax{lamb_max}_seed{seed}_T1.000'
-    flow = utils_mcf.build_positive_definite_vector(d, context_features=128, hidden_features=256, n_layers=10)
+    flow = utils_mcf.build_positive_definite_vector(d, context_features=64, hidden_features=256, n_layers=10)
     flow.load_state_dict(torch.load(f"./models/cmf_{file_name}"))
 
     sample_size, context_size = 100, 100
@@ -373,19 +375,27 @@ def box_plot_comparison (S, lamb_min, lamb_max, X_train, p_min=0.25, p_max=1.25,
 
     # create boxplot
     lambda_names = [f"{i:.1f}" for i in lambdas]
-    for i in range(0,d,2):
+    for i in range(0,d):
         for j in range(i,d,2):
-            plt.figure(figsize=(14,7))
-            bayes_lasso_df = pd.DataFrame(samples_blasso[...,i,j].T, columns=lambda_names).assign(model="bayes lasso")
-            flow_p100_df = pd.DataFrame(samples_flow['1.0'][...,i,j].T, columns=lambda_names).assign(model="flow (p=1.00)")
-            flow_p075_df = pd.DataFrame(samples_flow['0.75'][...,i,j].T, columns=lambda_names).assign(model="flow (p=0.75)")
-            flow_p050_df = pd.DataFrame(samples_flow['0.5'][...,i,j].T, columns=lambda_names).assign(model="flow (p=0.50)")
-            flow_p025_df = pd.DataFrame(samples_flow['0.25'][...,i,j].T, columns=lambda_names).assign(model="flow (p=0.25)")
+            fig, ax = plt.subplots()
+            flow_p025_df = pd.DataFrame(samples_flow['0.25'][...,i,j].T, columns=lambda_names).assign(model="CMF (p=0.25)")
+            flow_p050_df = pd.DataFrame(samples_flow['0.5'][...,i,j].T, columns=lambda_names).assign(model="CMF (p=0.50)")
+            flow_p075_df = pd.DataFrame(samples_flow['0.75'][...,i,j].T, columns=lambda_names).assign(model="CMF (p=0.75)")
+            flow_p100_df = pd.DataFrame(samples_flow['1.0'][...,i,j].T, columns=lambda_names).assign(model="CMF (p=1.00)")
+            bayes_lasso_df = pd.DataFrame(samples_blasso[...,i,j].T, columns=lambda_names).assign(model="BGL")
             cdf = pd.concat([bayes_lasso_df, flow_p100_df, flow_p075_df, flow_p050_df, flow_p025_df])
-            mdf = pd.melt(cdf, id_vars=['model'], var_name=r'$\lambda$', value_name=r"$\beta$")
-            sns.boxplot(x=r'$\lambda$', y=r"$\beta$", hue="model", data=mdf)
-            plt.scatter(range(0,n_lambdas),W_glasso[...,i,j], marker='x', s=100, c='r', label='glasso')
-            plt.legend()
+            mdf = pd.melt(cdf, id_vars=['model'], var_name=r'$\lambda$', value_name=r"$\Omega$")
+            sns.boxplot(x=r'$\lambda$', y=r"$\Omega$", hue="model", data=mdf)
+            # plt.scatter(range(0,n_lambdas),W_glasso[...,i,j], marker='x', s=100, c='r', label='glasso')
+            xmax = np.linspace(0.5, n_lambdas-0.5, n_lambdas)-0.1
+            xmin = np.linspace(-0.5, n_lambdas-1.5, n_lambdas)+0.1
+            ax.hlines(W_glasso[..., i, j], xmin=xmin, xmax=xmax, color='r', linestyle='dashed', label='GLasso', zorder=100)
+            plt.locator_params(axis='y', nbins=4)
+            plt.xlabel(r'$\lambda$', fontsize=18)
+            plt.ylabel(r'$\Omega$', fontsize=18)
+            plt.xticks(fontsize=12)
+            plt.yticks(fontsize=12)
+            ax.legend()
             plt.savefig(f"./plots/box_plot_{i}_{j}.pdf", bbox_inches='tight')
             plt.close()
             plt.clf()
@@ -404,7 +414,7 @@ def plot_GLasso_solution(S, N, n, lamb_min_exp , lamb_max_exp, n_points = 100, s
     indices = np.tril_indices(N, k=-1)
     tril_indices = (..., indices[0], indices[1])
     W_tril_sklearn = W_sklearn[tril_indices].reshape(n_points, -1)
-    plt.plot(alphas, W_tril_sklearn)
+    plt.plot(lambdas, W_tril_sklearn)
     plt.xscale('log')
     plt.xlabel(r'$\lambda$', fontsize=18)
     plt.ylabel(r'$\Omega$', fontsize=18)

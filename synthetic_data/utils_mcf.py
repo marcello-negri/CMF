@@ -191,14 +191,14 @@ def log_prior_generalized_normal(W: torch.Tensor, lamb_exp: torch.Tensor, p: tor
     W_tril_p = (W_tril.abs() + eps).pow(p_reshaped_W).sum(-1)
 
     W_diag = torch.diagonal(W, dim1=-2, dim2=-1) # diagonal elements with 0.5 lambda regularization
-    W_diag_p = (W_diag.abs() + eps).sum(-1)  # .pow(p_reshaped_W).sum(-1)
+    W_diag_p = (W_diag.abs()).sum(-1)  # .pow(p_reshaped_W).sum(-1)
 
     log_prior_gen_norm = - lamb * W_tril_p - 0.5 * lamb * W_diag_p
 
     # compute normalization constant
     if torch.any(torch.isnan(log_prior_gen_norm)): breakpoint()
     norm_const = (0.5 * p).log() + lamb.log() / p - torch.lgamma(1. / p)
-    norm_const_diag = (0.5 * p).log() + (0.5*lamb).log() / p - torch.lgamma(1. / p)
+    norm_const_diag = (0.5 * lamb).log()
     if torch.any(torch.isnan(norm_const)): breakpoint()
     log_const = n_elements * norm_const + W.shape[-1] * norm_const_diag
 
@@ -323,7 +323,7 @@ def train_model(model, S, X, d, n, epochs=2_001, T0=5., Tn=.001, iter_per_cool_s
                                                                                                        lambda_max_exp=lambda_max_exp)
                 alpha_sorted = lambda_sorted * 2 / n
                 utils_plot.plot_W_fixed_p(model, S, p=p, T=T, lamb_min=lambda_min_exp, lamb_max=lambda_max_exp, X_train=X,
-                               n_plots=20)
+                               n_plots=5)
                 alpha_scikit = utils_plot.plot_log_likelihood(X, alpha_sorted, kl_T_mean, kl_T_std)
 
             if epoch == epochs-1:
@@ -336,6 +336,8 @@ def train_model(model, S, X, d, n, epochs=2_001, T0=5., Tn=.001, iter_per_cool_s
                 alpha_sorted = lambda_sorted * 2 / n
                 opt_alpha = optimal_alpha(X, alpha_sorted, kl_T_mean)
                 save_alpha(opt_alpha, file_name=file_name)
+
+                if T==1.: alpha_scikit = utils_plot.plot_log_likelihood(X, alpha_sorted, kl_T_mean, kl_T_std)
 
 
     except KeyboardInterrupt:

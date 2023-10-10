@@ -52,7 +52,16 @@ def build_positive_definite_vector (matrix_dim, n_layers=3, context_features=16,
     # Define an invertible transformation
     transformation_layers = []
 
+    transformation_layers.append(
+        InverseTransform(
+            ActNorm(features=flow_dim)
+        )
+    )
+
     for _ in range(n_layers):
+        transformation_layers.append(
+            RandomPermutation(flow_dim)
+        )
         transformation_layers.append(
             InverseTransform(
                 MaskedSumOfSigmoidsTransform(features=flow_dim, hidden_features=hidden_features,
