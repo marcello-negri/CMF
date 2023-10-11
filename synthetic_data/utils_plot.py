@@ -96,7 +96,22 @@ def plot_loss (loss, loss_T):
     plt.clf()
     # plt.show()
 
-def plot_log_likelihood(X, alpha_sorted, kl_T_mean, kl_T_std, folder_name=None):
+def save_lambda(lambda_cmf, lambda_glasso, file_name=None, folder_name=None):
+    if folder_name is None:
+        folder_name = "./models/"
+
+    if file_name is None:
+        file_name = ''
+
+    if not os.path.exists(folder_name):
+        os.makedirs(folder_name)
+
+    f = open(f"{folder_name}optimal_lambda_cmf_{file_name}.txt", "a")
+    f.write(f"opt_lambda_CMF:{lambda_cmf}\n")
+    f.write(f"opt_lambda_GLasso:{lambda_glasso}\n")
+    f.close()
+
+def plot_marginal_log_likelihood(X, lambda_sorted, kl, conf=0.95, file_name=None, folder_name=None):
 
     if folder_name is None:
         folder_name = "./plots/"
@@ -104,26 +119,38 @@ def plot_log_likelihood(X, alpha_sorted, kl_T_mean, kl_T_std, folder_name=None):
     if not os.path.exists(folder_name):
         os.makedirs(folder_name)
 
+    n = X.shape[0]
+    alpha_sorted = lambda_sorted * 2 / n
     print("Computing best lambda with 5-fold cross-validation GLasso...")
-    alpha_scikit = GraphicalLassoCV(alphas=alpha_sorted * 0.5).fit(X).alpha_
+    alpha_GLasso = GraphicalLassoCV(alphas=alpha_sorted * 0.5).fit(X).alpha_
+    lambda_GLasso = alpha_GLasso * n / 2.
+
+    # compute credible intervals for marginal log likelihood
+    # assuming convergence, the mll is equal to the negative kl divergence at the end of training
+    mll_mean = -kl.mean(1)
+    mll_l = np.quantile(-kl, 1 - conf, axis=1)
+    mll_r = np.quantile(-kl, conf, axis=1)
+    lambda_cmf = lambda_sorted[np.argmax(mll_mean)] # lambda that maximises the marginal log likelihood
 
     fig, ax = plt.subplots()
-    ax.plot(alpha_sorted, -kl_T_mean, alpha=0.7)
-    kl_min, kl_max = (-kl_T_mean - 2*kl_T_std).min(), (-kl_T_mean + 2*kl_T_std).max()
-    ax.fill_between(alpha_sorted, -kl_T_mean - 2*kl_T_std, -kl_T_mean + 2*kl_T_std, facecolor='b', alpha=0.3)
+    ax.plot(lambda_sorted, mll_mean, alpha=0.7)
+    ax.fill_between(lambda_sorted, mll_l, mll_r, facecolor='b', alpha=0.3)
     plt.xscale('log')
     plt.xlabel(r'$\lambda$', fontsize=18)
     plt.ylabel(r'$\log p(X|\lambda)$', fontsize=18)
     plt.locator_params(axis='y', nbins=4)
     plt.xticks(fontsize=12)
     plt.yticks(fontsize=12)
-    plt.vlines(alpha_scikit, kl_min, kl_max, label='GLasso CV', colors='r')
-    plt.vlines(alpha_sorted[np.argmin(kl_T_mean)], kl_min, kl_max, label='flow estimate', colors='b')
+    plt.vlines(lambda_GLasso, mll_l.min(), mll_r.max(), label='GLasso CV', colors='r', linestyles='dashed')
+    plt.vlines(lambda_cmf, mll_l.min(), mll_r.max(), label='CMF estimate', colors='b',linestyles='dotted')
     plt.legend()
     plt.savefig(f"{folder_name}W_marginal_likelihood.pdf", bbox_inches='tight')
     plt.clf()
     # plt.show()
-    print(f"optimal lambdas: {alpha_sorted[np.argmin(kl_T_mean)]} {alpha_scikit}")
+    print(f"optimal lambda CMF: {lambda_cmf}")
+    print(f"optimal lambdas GLasso: {lambda_GLasso}")
+
+    save_lambda(lambda_cmf, lambda_GLasso, file_name=file_name)
 
 def plot_W_comparison_old(W_mean, W_std, W_sklearn, lambdas, p, T, off_diagonal=True, folder_name=None, n_plots=3):
 
@@ -255,9 +282,9 @@ def plot_W_comparison(W_flow, W_sklearn, lambdas, p, T, conf=0.95, off_diagonal=
             ax.set_xscale('log')
             plt.xlabel(r'$\lambda$', fontsize=18)
             plt.ylabel(r'$\Omega$', fontsize=18)
-            # ax.locator_params(axis='y', nbins=4)
+            ax.locator_params(axis='y', nbins=4)
             plt.xticks(fontsize=12)
-            plt.yticks([0.0,2.0], fontsize=12)
+            # plt.yticks([0.0,2.0], fontsize=12)
             if off_diagonal:
                 plt.savefig(f"{folder_name}W_lambda_p{p.item():.2f}_T{T:.3f}_off_{i}.pdf", bbox_inches='tight')
             else:
@@ -306,12 +333,10 @@ def plot_W_comparison(W_flow, W_sklearn, lambdas, p, T, conf=0.95, off_diagonal=
 
 def plot_W_fixed_p (flow, S, p, T, lamb_min, lamb_max, X_train, n_plots=3, n_iter=50, sample_size=1000):
     n = X_train.shape[0]
-    samples, kl_mean, kl_T_mean, kl_std, kl_T_std, W_mean, W_std, lambda_sorted = utils_mcf.sample_W_fixed_p(flow, S, p=p, n=n,
-                                                                                                   T=T, context_size=2,
-                                                                                                   sample_size=sample_size,
-                                                                                                   n_iter=n_iter,
-                                                                                                   lambda_min_exp=lamb_min,
-                                                                                                   lambda_max_exp=lamb_max)
+    samples, kl, kl_T, W_mean, W_std, lambda_sorted = utils_mcf.sample_W_fixed_p(flow, S, p=p, n=n, T=T, context_size=2,
+                                                                                 sample_size=sample_size, n_iter=n_iter,
+                                                                                 lambda_min_exp=lamb_min,
+                                                                                 lambda_max_exp=lamb_max)
     p_value = p.detach().cpu().numpy()
 
     alpha_sorted = lambda_sorted * 2 / n
@@ -374,6 +399,11 @@ def box_plot_comparison (S, lamb_min, lamb_max, X_train, p_min=0.25, p_max=1.25,
         samples_flow[str(p_value)] = posterior_samples.detach().cpu().numpy()
 
     # create boxplot
+    palette_tab10 = sns.color_palette("tab10", 10)
+    palette_blue = list(sns.light_palette(palette_tab10[0], n_colors=6))[::-1][:4]
+    palette_salmon = list(sns.light_palette(palette_tab10[1], n_colors=6))[::-1][:1]
+    palette = palette_blue + palette_salmon
+
     lambda_names = [f"{i:.1f}" for i in lambdas]
     for i in range(0,d):
         for j in range(i,d,2):
@@ -383,9 +413,10 @@ def box_plot_comparison (S, lamb_min, lamb_max, X_train, p_min=0.25, p_max=1.25,
             flow_p075_df = pd.DataFrame(samples_flow['0.75'][...,i,j].T, columns=lambda_names).assign(model="CMF (p=0.75)")
             flow_p100_df = pd.DataFrame(samples_flow['1.0'][...,i,j].T, columns=lambda_names).assign(model="CMF (p=1.00)")
             bayes_lasso_df = pd.DataFrame(samples_blasso[...,i,j].T, columns=lambda_names).assign(model="BGL")
-            cdf = pd.concat([bayes_lasso_df, flow_p100_df, flow_p075_df, flow_p050_df, flow_p025_df])
+            # cdf = pd.concat([bayes_lasso_df, flow_p100_df, flow_p075_df, flow_p050_df, flow_p025_df])
+            cdf = pd.concat([flow_p025_df, flow_p050_df, flow_p075_df, flow_p100_df, bayes_lasso_df])
             mdf = pd.melt(cdf, id_vars=['model'], var_name=r'$\lambda$', value_name=r"$\Omega$")
-            sns.boxplot(x=r'$\lambda$', y=r"$\Omega$", hue="model", data=mdf)
+            sns.boxplot(x=r'$\lambda$', y=r"$\Omega$", hue="model", data=mdf, palette=palette)
             # plt.scatter(range(0,n_lambdas),W_glasso[...,i,j], marker='x', s=100, c='r', label='glasso')
             xmax = np.linspace(0.5, n_lambdas-0.5, n_lambdas)-0.1
             xmin = np.linspace(-0.5, n_lambdas-1.5, n_lambdas)+0.1

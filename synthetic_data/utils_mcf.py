@@ -246,24 +246,6 @@ def save_model (model, file_name=None, folder_name=None):
 
     torch.save(model.state_dict(), f"{folder_name}cmf_{file_name}")
 
-def save_alpha (alpha, file_name=None, folder_name=None):
-    if folder_name is None:
-        folder_name = "./models/"
-
-    if file_name is None:
-        file_name = ''
-
-    if not os.path.exists(folder_name):
-        os.makedirs(folder_name)
-
-    f = open(f"{folder_name}cmf_{file_name}.txt", "a")
-    f.write(f"{alpha}\n")
-    f.close()
-
-def optimal_alpha(X, alpha_sorted, kl_T_mean):
-
-    return alpha_sorted[np.argmin(kl_T_mean)]
-
 def train_model(model, S, X, d, n, epochs=2_001, T0=5., Tn=.001, iter_per_cool_step=100, lr=1e-3, sample_size=1, context_size=1_000,
                 p_min=0.01, p_max=3., lambda_min_exp=-2, lambda_max_exp=1, device="cuda", seed=1234):
     file_name = f'd{d}_n{n}_e{epochs}_pmin{p_min}_pmax{p_max}_lmin{lambda_min_exp}_lmax{lambda_max_exp}_seed{seed}'
@@ -312,32 +294,20 @@ def train_model(model, S, X, d, n, epochs=2_001, T0=5., Tn=.001, iter_per_cool_s
             T_1 = 1
             T_1_condition = T >= T_1 and cooling_function((epoch+1) // (epochs / num_iter)) < T_1
 
-            if T_1_condition:
+            if T_1_condition or (T==1. and epoch == epochs-1):
                 save_model (model, file_name=file_name+f'_T{T:.3f}')
                 p = uniform_p.new_ones(1)
                 n = X.shape[0]
-                samples, kl_mean, kl_T_mean, kl_std, kl_T_std, W_mean, W_std, lambda_sorted = sample_W_fixed_p(model, S, T=T, p=p, n=n,
-                                                                                                       context_size=2,
-                                                                                                       sample_size=50,
-                                                                                                       lambda_min_exp=lambda_min_exp,
-                                                                                                       lambda_max_exp=lambda_max_exp)
-                alpha_sorted = lambda_sorted * 2 / n
-                utils_plot.plot_W_fixed_p(model, S, p=p, T=T, lamb_min=lambda_min_exp, lamb_max=lambda_max_exp, X_train=X,
-                               n_plots=5)
-                alpha_scikit = utils_plot.plot_log_likelihood(X, alpha_sorted, kl_T_mean, kl_T_std)
+                samples, kl, kl_T, W_mean, W_std, lambda_sorted = sample_W_fixed_p(model, S, T=T, p=p, n=n,
+                                                                                   sample_size=200,context_size=2,
+                                                                                   lambda_min_exp=lambda_min_exp,
+                                                                                   lambda_max_exp=lambda_max_exp)
+                utils_plot.plot_W_fixed_p(model, S, p=p, T=T, lamb_min=lambda_min_exp, lamb_max=lambda_max_exp, X_train=X, n_plots=10)
+                utils_plot.plot_marginal_log_likelihood(X, lambda_sorted, kl, file_name=file_name)
+                utils_plot.box_plot_comparison(S.detach().cpu().numpy(), lambda_min_exp, lambda_max_exp, X,
+                                               p_min=p_min, p_max=p_max, epochs=epochs, n_lambdas=4, burnin=1000,
+                                               n_iter=2000, n_plots=3, seed=seed)
 
-            if epoch == epochs-1:
-                p = uniform_p.new_ones(1)
-                n = X.shape[0]
-                samples, kl_mean, kl_T_mean, kl_std, kl_T_std, W_mean, W_std, lambda_sorted = sample_W_fixed_p(model, S, T=T, p=p, n=n, context_size=2,
-                                                                                                               sample_size=50,
-                                                                                                               lambda_min_exp=lambda_min_exp,
-                                                                                                               lambda_max_exp=lambda_max_exp)
-                alpha_sorted = lambda_sorted * 2 / n
-                opt_alpha = optimal_alpha(X, alpha_sorted, kl_T_mean)
-                save_alpha(opt_alpha, file_name=file_name)
-
-                if T==1.: alpha_scikit = utils_plot.plot_log_likelihood(X, alpha_sorted, kl_T_mean, kl_T_std)
 
 
     except KeyboardInterrupt:
@@ -377,14 +347,11 @@ def sample_W_fixed_p (model, S, T, p, n, context_size=10, sample_size=100, lambd
 
     # kl for marginal likelihood
     kl_list, kl_T_list = np.concatenate(kl_list, 0), np.concatenate(kl_T_list, 0)
-    kl_mean, kl_T_mean = kl_list.mean(1), kl_T_list.mean(1)
-    kl_std, kl_T_std = kl_list.std(1), kl_T_list.std(1)
 
     lambda_sorted_idx = lambda_list.argsort()
     lambda_sorted = lambda_list[lambda_sorted_idx]
     W_mean, W_std = W_mean[lambda_sorted_idx], W_std[lambda_sorted_idx]
-    kl_mean, kl_T_mean = kl_mean[lambda_sorted_idx], kl_T_mean[lambda_sorted_idx]
-    kl_std, kl_T_std = kl_std[lambda_sorted_idx], kl_T_std[lambda_sorted_idx]
+    kl, kl_T = kl_list[lambda_sorted_idx], kl_T_list[lambda_sorted_idx]
     samples_sorted = samples[lambda_sorted_idx]
 
-    return samples_sorted, kl_mean, kl_T_mean, kl_std, kl_T_std, W_mean, W_std, lambda_sorted
+    return samples_sorted, kl, kl_T, W_mean, W_std, lambda_sorted

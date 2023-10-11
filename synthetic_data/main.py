@@ -59,7 +59,7 @@ def main():
 
     # train model
     p_min, p_max = .25, 1.25
-    T0, Tn = 5, 1
+    T0, Tn = 5, 1.041
 
     file_name = f'd{args.d}_n{args.n}_e{args.epochs}_pmin{p_min}_pmax{p_max}_lmin{lamb_min_exp}_lmax{lamb_max_exp}_seed{args.seed}_T{Tn:.3f}'
     if os.path.isfile(f"./models/cmf_{file_name}"):
@@ -70,19 +70,19 @@ def main():
         # plot loss function
         utils_plot.plot_loss(loss, loss_T)
 
-    # plot MAP for different l_p norms
-    n_plots = 10
-    p = torch.tensor(1.).cuda() # Lasso solution
-    MSE_flow = utils_plot.plot_W_fixed_p(flow, S_torch, p=p, T=Tn, lamb_min=lamb_min_exp, lamb_max=lamb_max_exp, X_train=X, n_plots=n_plots, n_iter=200, sample_size=1000)
-
-
+    # # plot MAP for different l_p norms
+    # n_plots = 10
+    # p = torch.tensor(1.).cuda() # Lasso solution
+    # MSE_flow = utils_plot.plot_W_fixed_p(flow, S_torch, p=p, T=Tn, lamb_min=lamb_min_exp, lamb_max=lamb_max_exp, X_train=X, n_plots=n_plots, n_iter=200, sample_size=1000)
+    #
+    #
     # sub_l1 = [0.75, 0.5, 0.25] # sub-l1 pseudo-norms
     # for i in sub_l1:
     #     print(f"p = {i}")
     #     utils_plot.plot_W_fixed_p(flow, S_torch, p=p * i, T=Tn, lamb_min=lamb_min_exp, lamb_max=lamb_max_exp, X_train=X, n_plots=n_plots, n_iter=200)
 
-    # utils_plot.box_plot_comparison(S, lamb_min_exp, lamb_max_exp, X, p_min=p_min, p_max=p_max, epochs=args.epochs, n_lambdas=4, burnin=1000,
-    #                                n_iter=2000, n_plots=3, seed=args.seed)
+    utils_plot.box_plot_comparison(S, lamb_min_exp, lamb_max_exp, X, p_min=p_min, p_max=p_max, epochs=args.epochs, n_lambdas=4, burnin=1000,
+                                   n_iter=2000, n_plots=3, seed=args.seed)
 
     breakpoint()
 
