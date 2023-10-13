@@ -262,7 +262,7 @@ def log_prior_generalized_normal(W: torch.Tensor, lamb_exp: torch.Tensor, p: tor
     return log_prior_gen_norm + log_const
 
 
-def log_prior_generalized_normal_(W: torch.Tensor, lamb: torch.Tensor, p: torch.Tensor, triangular=True, diagonal=False) -> torch.Tensor:
+def log_prior_generalized_normal_(W: torch.Tensor, lamb_exp: torch.Tensor, p: torch.Tensor, triangular=True, diagonal=False) -> torch.Tensor:
     """
     \propto p(W|λ)
     :param W: precision matrix W
@@ -284,6 +284,7 @@ def log_prior_generalized_normal_(W: torch.Tensor, lamb: torch.Tensor, p: torch.
 
     # compute prior
     eps = 1e-7
+    lamb = 10 ** lamb_exp
     p_reshaped_W = p.view(-1, *len(W_tril.shape[1:]) * (1,))  # (-1, 1, 1)
     W_tril_p = (W_tril.abs() + eps).pow(p_reshaped_W).sum(-1)
     log_prior_gen_norm = - lamb * W_tril_p
@@ -328,7 +329,7 @@ def log_unnorm_posterior(W, S, lamb_exp, p, n):
     return likelihood + off_diag_prior # + diag_prior
 
 
-def log_unnorm_posterior_p(W: torch.Tensor, S: torch.Tensor, P, Q, n, lamb, p):
+def log_unnorm_posterior_p(W: torch.Tensor, S: torch.Tensor, P, Q, n, lamb_exp, p):
     """
     \propto p(W_11, W_12 | S, lambda)
     :param W: precision matrix W
@@ -367,10 +368,10 @@ def log_unnorm_posterior_p(W: torch.Tensor, S: torch.Tensor, P, Q, n, lamb, p):
     trace = trace_T1 + trace_T2 + trace_T3
 
     # prior W11
-    log_prior_W11 = log_prior_generalized_normal_(W11, lamb, p, triangular=True, diagonal=False)
+    log_prior_W11 = log_prior_generalized_normal_(W11, lamb_exp, p, triangular=True, diagonal=False)
 
     # prior W12
-    log_prior_W12 = log_prior_generalized_normal_(W12, lamb, p, triangular=False)
+    log_prior_W12 = log_prior_generalized_normal_(W12, lamb_exp, p, triangular=False)
 
     # log_prior_const = (0.5 * P * (P - 1) + P * Q ) * torch.log(0.5 * lamb)
 
@@ -408,8 +409,11 @@ def compute_glasso_solution(S, alpha_sorted, folder_name=None):
 
     return sol_dict
 
-def train_model(model, S, P, Q, n, epochs=2_001, T0=5., Tn=.001, iter_per_cool_step=100, lr=1e-3, sample_size=1,
-                context_size=1_000, p_min=0.01, p_max=3., lambda_min_exp=-2, lambda_max_exp=1, device="cuda", **kwargs):
+
+
+
+def train_model(model, S, P, Q, n, epochs=2_001, T0=5., Tn=.001, iter_per_cool_step=100, lr=1e-3, sample_size=1, context_size=1_000,
+                p_min=0.01, p_max=3., lambda_min_exp=-2, lambda_max_exp=1, device="cuda", file_name=None, **kwargs):
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
 
@@ -425,13 +429,13 @@ def train_model(model, S, P, Q, n, epochs=2_001, T0=5., Tn=.001, iter_per_cool_s
 
             optimizer.zero_grad()
             uniform_lambdas = torch.rand(context_size).to(device)
-            lambdas = 10**(uniform_lambdas * (lambda_max_exp - lambda_min_exp) + lambda_min_exp).view(-1, 1)
+            lambdas_exp = (uniform_lambdas * (lambda_max_exp - lambda_min_exp) + lambda_min_exp).view(-1, 1)
             uniform_p = torch.rand(context_size) * (p_max - p_min) + p_min
             uniform_p = uniform_p.to(device).view(-1, 1)
-            context = torch.cat((lambdas, uniform_p), 1)
+            context = torch.cat((lambdas_exp, uniform_p), 1)
 
             q_samples_W, q_log_prob_W = model.sample_and_log_prob(num_samples=sample_size, context=context)
-            posterior_eval = log_unnorm_posterior_p(q_samples_W, S=S, P=P, Q=Q, n=n, lamb=lambdas, p=uniform_p)
+            posterior_eval = log_unnorm_posterior_p(q_samples_W, S=S, P=P, Q=Q, n=n, lamb_exp=lambdas_exp, p=uniform_p)
 
             kl_div = torch.mean(q_log_prob_W - posterior_eval / T)
 
@@ -453,42 +457,16 @@ def train_model(model, S, P, Q, n, epochs=2_001, T0=5., Tn=.001, iter_per_cool_s
             T_1 = 1
             T_1_condition = T >= T_1 and cooling_function((epoch + 1) // (epochs / num_iter)) < T_1
             if epoch == epochs-1 or T_1_condition:
-                save_model (model, T)
+                save_model (model, file_name=file_name)
                 p = uniform_p.new_ones(1)
-                samples, kl, kl_T, W_mean, W_std, lambda_sorted = \
-                    sample_W_fixed_p(model, S, P=P, Q=Q, n=n, T=T, p=p, context_size=2, sample_size=50,
-                                     n_iterations=50, lambda_min_exp=lambda_min_exp, lambda_max_exp=lambda_max_exp)
-                alpha_sorted = lambda_sorted * 2 / n
-                optimal_lambda = utils_plot.plot_marginal_log_likelihood(lambda_sorted, kl, T)
-                glasso_solution = compute_glasso_solution(S, alpha_sorted)
-
-                # plot W_11 block
-                MSE_W11 = utils_plot.plot_W_comparison(samples[:, :, :P, :P], glasso_solution['W'][:, :P, :P], lambda_sorted=lambda_sorted,
-                                            lambda_glasso=glasso_solution['alphas'] * n / 2., T=T, extract_triangular=True)
-
-                # plot W_12 block
-                MSE_W12 = utils_plot.plot_W_comparison(samples[:, :, :P, P:], glasso_solution['W'][:, :P, P:],
-                                            lambda_sorted=lambda_sorted, lambda_glasso=glasso_solution['alphas'] * n / 2.,
-                                                       T=T, extract_triangular=False, n_plots=20)
-
-                samples, kl_mean, kl_T_mean, kl_std, kl_T_std, W_mean, W_std = sample_W_fixed_lamb_and_p(model, S, P, Q, n, T,
-                                                                                                         p=p, lamb=optimal_lambda,
-                                                                                                         n_iterations=100,
-                                                                                                         context_size=10,
-                                                                                                         sample_size=1)
-
-                # consider W_12 block only
-                samples = samples[:, :, P:]
-                # ravel to vector column wise (R is column-major)
-                samples = samples.reshape(samples.shape[0], -1, order='F')
-                pyreadr.write_rdata(f"./cond_flow_data_optlamb_{optimal_lambda:.3f}_optalph_{optimal_lambda * 2 / n:.3f}_{T:.3f}.RData",
-                                    pd.DataFrame(samples), df_name="CMB.array", compress="gzip")
+                utils_plot.plot_full_comparison(model, S=S, P=P, Q=Q, n=n, T=T, p=p, lambda_min=lambda_min_exp,
+                                                lambda_max=lambda_max_exp, file_name=file_name, plot_mll=True)
 
 
     except KeyboardInterrupt:
         print("interrupted..")
 
-    save_model (model, T)
+    save_model (model, file_name=file_name)
 
     end_time = time.monotonic()
     time_diff = timedelta(seconds=end_time - start_time)
@@ -502,15 +480,16 @@ def sample_W_fixed_p (model, S, P, Q, n, T, p, context_size=10, sample_size=100,
     with torch.no_grad():
         for _ in tqdm.tqdm(range(n_iterations)):
             uniform_lambdas = torch.rand(context_size).cuda()
-            lambdas = 10**(uniform_lambdas * (lambda_max_exp - lambda_min_exp) + lambda_min_exp).view(-1, 1)
-            uniform_p = lambdas.new_ones(context_size).view(-1, 1) * p
-            context = torch.cat((lambdas, uniform_p), 1)
+            lambdas_exp = (uniform_lambdas * (lambda_max_exp - lambda_min_exp) + lambda_min_exp).view(-1, 1)
+            uniform_p = lambdas_exp.new_ones(context_size).view(-1, 1) * p
+            context = torch.cat((lambdas_exp, uniform_p), 1)
             posterior_samples, log_probs_samples = model.sample_and_log_prob(sample_size, context=context)
-            posterior_eval = log_unnorm_posterior_p(posterior_samples, S=S, P=P, Q=Q, n=n, lamb=lambdas, p=uniform_p)
+            posterior_eval = log_unnorm_posterior_p(posterior_samples, S=S, P=P, Q=Q, n=n, lamb_exp=lambdas_exp, p=uniform_p)
             kl_div = log_probs_samples - posterior_eval
             kl_div_T = log_probs_samples - posterior_eval / T
             samples.append(posterior_samples.cpu().detach().numpy())
-            lambda_list.append((lambdas**p).view(-1).cpu().detach().numpy())
+            # lambda_list.append((lambdas**p).view(-1).cpu().detach().numpy())
+            lambda_list.append((10**lambdas_exp).view(-1).cpu().detach().numpy())
             kl_list.append(kl_div.cpu().detach().numpy())
             kl_T_list.append(kl_div_T.cpu().detach().numpy())
 
@@ -530,9 +509,9 @@ def sample_W_fixed_p (model, S, P, Q, n, T, p, context_size=10, sample_size=100,
     return samples_sorted, kl, kl_T, W_mean, W_std, lambda_sorted
 
 
-def sample_W_fixed_lamb_and_p (model, S, P, Q, n, T, p, lamb, context_size=10, sample_size=100, n_iterations=500):
+def sample_W_fixed_lamb_and_p (model, S, p, lamb, sample_size=100, n_iterations=500):
     # Sample from approximate posterior & estimate significant edges via  posterior credible interval
-    samples,kl_list, kl_T_list = [], [], []
+    samples = []
 
     with torch.no_grad():
         for _ in tqdm.tqdm(range(n_iterations)):
@@ -540,20 +519,9 @@ def sample_W_fixed_lamb_and_p (model, S, P, Q, n, T, p, lamb, context_size=10, s
             uniform_p = S.new_ones(1,1) * p
             context = torch.cat((lambdas, uniform_p), 1)
             posterior_samples, log_probs_samples = model.sample_and_log_prob(sample_size, context=context)
-            posterior_eval = log_unnorm_posterior_p(posterior_samples, S=S, P=P, Q=Q, n=n, lamb=lambdas, p=uniform_p)
-            kl_div = log_probs_samples - posterior_eval
-            kl_div_T = log_probs_samples - posterior_eval / T
             samples.append(posterior_samples[0].cpu().detach().numpy())
-            kl_list.append(kl_div.cpu().detach().numpy())
-            kl_T_list.append(kl_div_T.cpu().detach().numpy())
 
     # samples from posterior
     samples = np.concatenate(samples, 0)
-    W_mean, W_std = samples.mean(1), samples.std(1)
 
-    # kl for marginal likelihood
-    kl_list, kl_T_list = np.concatenate(kl_list, 0), np.concatenate(kl_T_list, 0)
-    kl_mean, kl_T_mean = kl_list.mean(1), kl_T_list.mean(1)
-    kl_std, kl_T_std = kl_list.std(1), kl_T_list.std(1)
-
-    return samples, kl_mean, kl_T_mean, kl_std, kl_T_std, W_mean, W_std
+    return samples
