@@ -509,15 +509,15 @@ def sample_W_fixed_p (model, S, P, Q, n, T, p, context_size=10, sample_size=100,
     return samples_sorted, kl, kl_T, W_mean, W_std, lambda_sorted
 
 
-def sample_W_fixed_lamb_and_p (model, S, p, lamb, sample_size=100, n_iterations=500):
+def sample_W_fixed_lamb_and_p (model, S, p, exp_lamb, sample_size=100, n_iterations=500):
     # Sample from approximate posterior & estimate significant edges via  posterior credible interval
     samples = []
 
     with torch.no_grad():
         for _ in tqdm.tqdm(range(n_iterations)):
-            lambdas = S.new_ones(1,1) * lamb
+            exp_lambda = S.new_ones(1,1) * exp_lamb
             uniform_p = S.new_ones(1,1) * p
-            context = torch.cat((lambdas, uniform_p), 1)
+            context = torch.cat((exp_lambda, uniform_p), 1)
             posterior_samples, log_probs_samples = model.sample_and_log_prob(sample_size, context=context)
             samples.append(posterior_samples[0].cpu().detach().numpy())
 
