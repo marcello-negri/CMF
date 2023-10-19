@@ -106,7 +106,7 @@ NSCAN = 5000
 burnin = floor(0.3 * NSCAN)
 
 lambda = 0.4
-thresh.low = 0.20
+thresh.low = 0.2
 
 data = get.data(pathway = pathway, use.log2 = TRUE, included.in.analysis = TRUE, class = 'Primary Tumor')
 Y.label = colnames(data$gene.expr) ### gene names in entrez notation
@@ -128,7 +128,7 @@ Y.label.symbol = as.vector(Y.label.symbol) ### gene names in symbol notation
 cat(sprintf('thresh.low = %.2f, lambda = %.2f\n', thresh.low, lambda))
 
 # load("./cond_flow_data_optimal_0.050_1.000.RData")
-load("./cond_flow_data_optlamb_29.836_optalph_0.306_1.000_p1.00.RData")
+load("./cond_flow_data_optlamb_16.248_optalph_0.167_1.000_p0.50.RData")
 CMB.array = as.matrix(sapply(CMB.array, as.numeric))
 CMB.mat = threshold.matrix(CMB.array, thresh.low, p, p+q)
 CMB.mat[lower.tri(CMB.mat)] = 0

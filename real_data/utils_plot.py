@@ -91,7 +91,7 @@ def plot_loss (loss, loss_T):
     plt.clf()
     # plt.show()
 
-def save_lambda(lambda_cmf, file_name=None, folder_name=None):
+def save_lambda(lambda_cmf, p, file_name=None, folder_name=None):
     if folder_name is None:
         folder_name = "./models/"
 
@@ -101,15 +101,15 @@ def save_lambda(lambda_cmf, file_name=None, folder_name=None):
     if not os.path.exists(folder_name):
         os.makedirs(folder_name)
 
-    f = open(f"{folder_name}optimal_lambda_cmf_{file_name}.txt", "w")
+    f = open(f"{folder_name}optimal_lambda_cmf_{file_name}_p{p:.2f}.txt", "w")
     f.write(f"{lambda_cmf}")
     f.close()
 
 def read_lambda(p, file_name=None, folder_name=None):
-    f = open(f"{folder_name}optimal_lambda_cmf_{file_name}_{p:.2f}.txt", "r")
+    f = open(f"{folder_name}optimal_lambda_cmf_{file_name}_p{p:.2f}.txt", "r")
     return f.read()
 
-def plot_marginal_log_likelihood(lambda_sorted, kl, T, conf=0.95, file_name=None, folder_name=None):
+def plot_marginal_log_likelihood(lambda_sorted, kl, T, p, conf=0.95, file_name=None, folder_name=None):
 
     if folder_name is None:
         folder_name = "./plots/"
@@ -140,7 +140,7 @@ def plot_marginal_log_likelihood(lambda_sorted, kl, T, conf=0.95, file_name=None
     # plt.show()
     print(f"optimal lambda CMF: {lambda_cmf}")
 
-    save_lambda(lambda_cmf, file_name=file_name)
+    save_lambda(lambda_cmf, p=p, file_name=file_name)
 
     return lambda_cmf
 
@@ -206,9 +206,10 @@ def plot_full_comparison(model, S, P, Q, n, T, p, lambda_min, lambda_max, contex
 
     alpha_sorted = lambda_sorted * 2 / n
     if plot_mll:
-        optimal_lambda = plot_marginal_log_likelihood(lambda_sorted, kl, T, file_name=file_name)
+        optimal_lambda = plot_marginal_log_likelihood(lambda_sorted, kl, T, p=p.item(), file_name=file_name)
     else:
         optimal_lambda = float(read_lambda(p.item(), file_name=file_name, folder_name="./models/"))
+        # optimal_lambda = float(read_lambda(1.0, file_name=file_name, folder_name="./models/"))
 
     glasso_solution = utils_mcf.compute_glasso_solution(S, alpha_sorted)
 
@@ -247,7 +248,7 @@ def plot_credibility_interval(p_values, file_name, n, n_values=5):
     P = 6
     Q = 312
     palette_tab10 = sns.color_palette("tab10", 10)
-    palette_blue = list(sns.light_palette(palette_tab10[0], n_colors=6))[::-1][:4]
+    palette_blue = list(sns.light_palette(palette_tab10[0], n_colors=6))[::-1][:5]
     palette_salmon = list(sns.light_palette(palette_tab10[1], n_colors=6))[::-1][:1]
     palette = palette_blue + palette_salmon
 
@@ -261,7 +262,7 @@ def plot_credibility_interval(p_values, file_name, n, n_values=5):
 
     samples_dict = {}
     for p_value in tqdm.tqdm(p_values):
-        optimal_lambda = float(read_lambda(p=1.0, file_name=file_name, folder_name="./models/"))
+        optimal_lambda = float(read_lambda(p=p_value, file_name=file_name, folder_name="./models/"))
         # file = f"./cond_flow_data_optlamb_28.537_optalph_0.293_1.000_p{p_value:.2f}.RData"
         file = f"./cond_flow_data_optlamb_{optimal_lambda:.3f}_optalph_{optimal_lambda * 2 / n:.3f}_1.000_p{p_value:.2f}.RData"
         samples = pyreadr.read_r(file)["CMB.array"].to_numpy(dtype=np.float32)
@@ -273,31 +274,25 @@ def plot_credibility_interval(p_values, file_name, n, n_values=5):
 
         if p_value == 1.0:
             samples_median = np.median(samples_reshaped, axis=0)
-            samples_mean = np.mean(samples_reshaped, axis=0)
-            # samples_l = np.quantile(samples_reshaped, axis=0, q=0.05)
-            # samples_r = np.quantile(samples_reshaped, axis=0, q=0.95)
-            # cred_interval = samples_r-samples_l
-            # idx_low = np.argsort(samples_median)[:n_values]
-            # idx_high = np.argsort(samples_median)[-n_values:]
-            # idx_high = idx_high[::-1]
             idx_median = np.argsort(np.abs(samples_median))[-n_values:][::-1]
-            idx_mean = np.argsort(np.abs(samples_mean))[-n_values:][::-1]
 
         samples_dict[p_value] = samples_reshaped
 
-    for idx in [idx_median, idx_mean]:
-        flow_samples = [pd.DataFrame(samples_dict[p_value][:,idx], columns=pair_vars[idx]).assign(model=f"CMF (q={p_value})")
-                        for p_value in np.sort(p_values)]
-        cdf = pd.concat(flow_samples)
-        mdf = pd.melt(cdf, id_vars=['model'], var_name=r'(clin, gene)', value_name=r"$\Omega$")
-        sns.boxplot(x=r'(clin, gene)', y=r"$\Omega$", hue="model", data=mdf, palette=palette, whis=[25, 75],
-                    showfliers=False)
-        plt.locator_params(axis='y', nbins=4)
-        plt.xlabel(r'$\lambda$', fontsize=18)
-        plt.ylabel(r'$\Omega$', fontsize=18)
-        plt.xticks(fontsize=12, rotation=90)
-        plt.yticks(fontsize=12)
-        plt.legend()
-        plt.savefig(f"./plots/box_plot_{idx.mean():.3f}.pdf", bbox_inches='tight')
-        plt.close()
-        plt.clf()
+
+    flow_samples = [pd.DataFrame(samples_dict[p_value][:,idx_median], columns=pair_vars[idx_median]).assign(model=f"CMF (q={p_value})")
+                    for p_value in np.sort(p_values)]
+    cdf = pd.concat(flow_samples)
+    mdf = pd.melt(cdf, id_vars=['model'], var_name=r'(clin, gene)', value_name=r"$\Omega$")
+    plt.figure(figsize=[2*6.4, 4.8])
+    g1 = sns.boxplot(x=r'(clin, gene)', y=r"$\Omega$", hue="model", data=mdf, palette=palette, whis=[5, 95],
+                showfliers=False)
+    g1.set(xlabel=None)
+    plt.locator_params(axis='y', nbins=4)
+    # plt.xlabel(r'$\lambda$', fontsize=18)
+    plt.ylabel(r'$\Omega$', fontsize=18)
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
+    plt.legend()
+    plt.savefig(f"./plots/box_plot.pdf", bbox_inches='tight')
+    plt.close()
+    plt.clf()

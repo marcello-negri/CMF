@@ -68,19 +68,15 @@ def main():
                                                        lambda_max_exp=args.lambda_max, T0=args.T0, Tn=args.Tn, iter_per_cool_step=100, file_name=file_name,)
             utils_plot.plot_loss (loss, loss_T)
 
-    # sub_l1 = [1.]#, 0.75, 0.5, 0.25]  # sub-l1 pseudo-norms
+    # sub_l1 = [0.9,0.8,0.7,0.6]  # sub-l1 pseudo-norms
     # for p_value in sub_l1:
     #     print(f"p = {p_value}")
     #     p = S_torch.new_ones(1) * p_value
     #     utils_plot.plot_full_comparison(flow, S=S_torch, P=P, Q=Q, n=n, T=args.Tn, p=p, lambda_min=args.lambda_min,
     #                                     lambda_max=args.lambda_max, file_name=file_name, plot_full_matrix=True, plot_mll=True)
 
-    p_values = [1.0]
-    utils_plot.plot_credibility_interval(p_values, file_name, n=n, n_values=20)
-
-    breakpoint()
-
-
+    p_values = [1.0,0.9,0.8,0.7,0.6]
+    utils_plot.plot_credibility_interval(p_values, file_name, n=n, n_values=5)
 
 if __name__ == "__main__":
     main()
