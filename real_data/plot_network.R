@@ -47,13 +47,10 @@ produce.graph = function(MB) {
   p = nrow(MB)
   q = ncol(MB)
 
-  W = matrix(0, nrow = (p + q), ncol = (p + q))
+  W = matrix(0, nrow = q, ncol = q)
 
   w = which(abs(MB) > 1e-5, arr.ind = TRUE)
-  w.topright = w
-  w.topright[, 2] = w.topright[, 2] + p
-
-  W[w.topright] = MB[w]
+  W[w] = MB[w]
   W[lower.tri(W)] = W[upper.tri(W)]
 
   g <- graph.adjacency(abs(W), weighted = TRUE, mode = 'upper', diag = FALSE)
@@ -70,9 +67,9 @@ produce.graph = function(MB) {
     edge.weights <- edge.weights / max(edge.weights) * 30
   }
 
-  V(g)$label = append(rownames(MB), Y.label)
+  V(g)$label = Y.label# append(rownames(MB), Y.label)
 
-   V(g)$color = c(rep('red', p), rep('white', q))
+  V(g)$color = c(rep('red', p), rep('white', q-p))
   V(g)$size = 5
   V(g)$label.family = 'sans'
   V(g)$label.cex = 0.7
@@ -105,11 +102,11 @@ pathway = 'KEGG_PATHWAYS_IN_CANCER'
 
 p = 6
 q = 312
-NSCAN = 1000
+NSCAN = 5000
 burnin = floor(0.3 * NSCAN)
 
-lambda = 0.533
-thresh.low = 0.23
+lambda = 0.4
+thresh.low = 0.2
 
 data = get.data(pathway = pathway, use.log2 = TRUE, included.in.analysis = TRUE, class = 'Primary Tumor')
 Y.label = colnames(data$gene.expr) ### gene names in entrez notation
@@ -126,15 +123,17 @@ Y.label.symbol = unlist(a)
 Y.label.symbol[which(is.na(Y.label.symbol))] = 'LOC652346'
 Y.label.symbol = as.vector(Y.label.symbol) ### gene names in symbol notation
 # Y.label = Y.label.symbol
-print(Y.label.symbol)
-print(thresh.low)
+# print(Y.label.symbol)
+# print(thresh.low)
 cat(sprintf('thresh.low = %.2f, lambda = %.2f\n', thresh.low, lambda))
 
 # load("./cond_flow_data_optimal_0.050_1.000.RData")
-load("./cond_flow_data_optlamb_26.753_optalph_0.274_1.000_p1.00.RData")
+load("./cond_flow_data_optlamb_16.248_optalph_0.167_1.000_p0.50.RData")
 CMB.array = as.matrix(sapply(CMB.array, as.numeric))
-CMB.mat = threshold.matrix(CMB.array, thresh.low, p, q)
+CMB.mat = threshold.matrix(CMB.array, thresh.low, p, p+q)
+CMB.mat[lower.tri(CMB.mat)] = 0
 rownames(CMB.mat) = X.label ### names of clinical variables
+Y.label.symbol <- append(X.label,Y.label.symbol)
 colnames(CMB.mat) = Y.label.symbol ### names of genes in symbol notation
 Y.label = Y.label.symbol
 g = produce.graph(CMB.mat)

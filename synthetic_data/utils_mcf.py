@@ -198,9 +198,13 @@ def log_prior_generalized_normal(W: torch.Tensor, lamb_exp: torch.Tensor, p: tor
     # compute normalization constant
     if torch.any(torch.isnan(log_prior_gen_norm)): breakpoint()
     norm_const = (0.5 * p).log() + lamb.log() / p - torch.lgamma(1. / p)
-    norm_const_diag = (0.5 * lamb).log()
     if torch.any(torch.isnan(norm_const)): breakpoint()
-    log_const = n_elements * norm_const + W.shape[-1] * norm_const_diag
+
+    if diagonal:
+        norm_const_diag = (0.5 * lamb).log()
+        log_const = n_elements * norm_const + W.shape[-1] * norm_const_diag
+    else:
+        log_const = n_elements * norm_const
 
     return log_prior_gen_norm + log_const
 

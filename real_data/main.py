@@ -76,7 +76,7 @@ def main():
     #                                     lambda_max=args.lambda_max, file_name=file_name, plot_full_matrix=True, plot_mll=True)
 
     p_values = [1.0,0.9,0.8,0.7,0.6]
-    utils_plot.plot_credibility_interval(p_values, file_name, n=n, n_values=5)
+    utils_plot.plot_credibility_interval(p_values, file_name, n=n, n_values=4)
 
 if __name__ == "__main__":
     main()

@@ -408,15 +408,15 @@ def box_plot_comparison (S, lamb_min, lamb_max, X_train, p_min=0.25, p_max=1.25,
     for i in range(0,d):
         for j in range(i,d,2):
             fig, ax = plt.subplots()
-            flow_p025_df = pd.DataFrame(samples_flow['0.25'][...,i,j].T, columns=lambda_names).assign(model="CMF (p=0.25)")
-            flow_p050_df = pd.DataFrame(samples_flow['0.5'][...,i,j].T, columns=lambda_names).assign(model="CMF (p=0.50)")
-            flow_p075_df = pd.DataFrame(samples_flow['0.75'][...,i,j].T, columns=lambda_names).assign(model="CMF (p=0.75)")
-            flow_p100_df = pd.DataFrame(samples_flow['1.0'][...,i,j].T, columns=lambda_names).assign(model="CMF (p=1.00)")
+            flow_p025_df = pd.DataFrame(samples_flow['0.25'][...,i,j].T, columns=lambda_names).assign(model="CMF (q=0.25)")
+            flow_p050_df = pd.DataFrame(samples_flow['0.5'][...,i,j].T, columns=lambda_names).assign(model="CMF (q=0.50)")
+            flow_p075_df = pd.DataFrame(samples_flow['0.75'][...,i,j].T, columns=lambda_names).assign(model="CMF (q=0.75)")
+            flow_p100_df = pd.DataFrame(samples_flow['1.0'][...,i,j].T, columns=lambda_names).assign(model="CMF (q=1.00)")
             bayes_lasso_df = pd.DataFrame(samples_blasso[...,i,j].T, columns=lambda_names).assign(model="BGL")
             # cdf = pd.concat([bayes_lasso_df, flow_p100_df, flow_p075_df, flow_p050_df, flow_p025_df])
             cdf = pd.concat([flow_p025_df, flow_p050_df, flow_p075_df, flow_p100_df, bayes_lasso_df])
             mdf = pd.melt(cdf, id_vars=['model'], var_name=r'$\lambda$', value_name=r"$\Omega$")
-            sns.boxplot(x=r'$\lambda$', y=r"$\Omega$", hue="model", data=mdf, palette=palette)
+            sns.boxplot(x=r'$\lambda$', y=r"$\Omega$", hue="model", data=mdf, palette=palette, whis=[5, 95], showfliers=False)
             # plt.scatter(range(0,n_lambdas),W_glasso[...,i,j], marker='x', s=100, c='r', label='glasso')
             xmax = np.linspace(0.5, n_lambdas-0.5, n_lambdas)-0.1
             xmin = np.linspace(-0.5, n_lambdas-1.5, n_lambdas)+0.1
