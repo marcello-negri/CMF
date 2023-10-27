@@ -8,8 +8,8 @@ import tqdm
 import utils_plot
 
 from datetime import timedelta
-from enflows.distributions import StandardNormal, Uniform, ConditionalDiagonalNormal
-from enflows.transforms import FillTriangular, RandomPermutation, MaskedSumOfSigmoidsTransform, LipschitzDenseNetBuilder, iResBlock
+from enflows.distributions import StandardNormal, ConditionalDiagonalNormal
+from enflows.transforms import FillTriangular, RandomPermutation, MaskedSumOfSigmoidsTransform, iResBlock
 from enflows.transforms.normalization import ActNorm
 from enflows.transforms.base import CompositeTransform, InverseTransform
 from enflows.transforms.matrix import TransformDiagonalSoftplus, CholeskyOuterProduct

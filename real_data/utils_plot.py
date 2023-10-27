@@ -224,16 +224,9 @@ def plot_full_comparison(model, S, P, Q, n, T, p, lambda_min, lambda_max, contex
     samples = utils_mcf.sample_W_fixed_lamb_and_p(model, S, p=p.item(), exp_lamb=np.log10(optimal_lambda), n_iterations=50, sample_size=100)
 
     print("saving samples to RData...")
-    # consider W_12 block only
-    # breakpoint()
     if not plot_full_matrix:
-        # N = samples.shape[-1]
-        # indices = np.tril_indices(N, k=-1)
-        # samples_W_11 = samples[:, indices[0], indices[1]]
-        # samples_W_12 = samples[:, :, P:]
-        # samples =
         samples = samples[:, :, P:]
-    else:
+    else: #consider W_12 block only
         indices = np.diag_indices(P)
         samples[:,indices[0], indices[1]] = 0
     # ravel to vector column wise (R is column-major)

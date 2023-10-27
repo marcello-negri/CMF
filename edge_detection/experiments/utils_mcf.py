@@ -3,20 +3,14 @@ import numpy as np
 import torch
 import time
 import os
-import tqdm
-
-import utils_plot
-
 from datetime import timedelta
-from enflows.distributions import StandardNormal, Uniform
-from enflows.transforms import FillTriangular, RandomPermutation, MaskedSumOfSigmoidsTransform
-from enflows.transforms.normalization import ActNorm
-from enflows.transforms.base import CompositeTransform, InverseTransform
-from enflows.transforms.matrix import TransformDiagonalSoftplus, CholeskyOuterProduct
-from enflows.flows.base import Flow
-from enflows.nn.nets import ResidualNet
-from sklearn.linear_model import LinearRegression, Lasso, Ridge
 
+import tqdm
+import utils_plot
+from nflows.transforms import *
+from nflows.distributions import *
+from nflows.flows.base import Flow
+from nflows.nn.nets import ResidualNet
 
 def calc_num_lower_tri_entries(matrix_dim, include_diag=True):
     N = matrix_dim
@@ -62,6 +56,7 @@ def build_positive_definite_vector (matrix_dim, n_layers=3, context_features=16,
         transformation_layers.append(
             RandomPermutation(flow_dim)
         )
+
         transformation_layers.append(
             InverseTransform(
                 MaskedSumOfSigmoidsTransform(features=flow_dim, hidden_features=hidden_features,

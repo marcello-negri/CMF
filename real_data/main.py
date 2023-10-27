@@ -10,7 +10,7 @@ import utils_mcf, utils_plot
 import argparse
 
 parser = argparse.ArgumentParser(description='Process some integers.')
-parser.add_argument('--epochs', metavar='e', type=int, default=20_000,
+parser.add_argument('--epochs', metavar='e', type=int, default=10_000,
                     help='number of epochs')
 parser.add_argument('--seed', metavar='s', type=int, default=1234,
                     help='random seed')
@@ -24,7 +24,7 @@ parser.add_argument('--lambda_max', metavar='l_max', type=float, default=2.,
                     help='lambda max')
 parser.add_argument('--T0', metavar='T0', type=float, default=5.,
                     help='initial temperature')
-parser.add_argument('--Tn', metavar='Tn', type=float, default=1.,
+parser.add_argument('--Tn', metavar='Tn', type=float, default=1., # set to 1e-2 to obtain MAP limit
                     help='final temperature')
 parser.add_argument('--eval', action='store_true', default=False)
 
@@ -68,15 +68,15 @@ def main():
                                                        lambda_max_exp=args.lambda_max, T0=args.T0, Tn=args.Tn, iter_per_cool_step=100, file_name=file_name,)
             utils_plot.plot_loss (loss, loss_T)
 
-    # sub_l1 = [0.9,0.8,0.7,0.6]  # sub-l1 pseudo-norms
-    # for p_value in sub_l1:
-    #     print(f"p = {p_value}")
-    #     p = S_torch.new_ones(1) * p_value
-    #     utils_plot.plot_full_comparison(flow, S=S_torch, P=P, Q=Q, n=n, T=args.Tn, p=p, lambda_min=args.lambda_min,
-    #                                     lambda_max=args.lambda_max, file_name=file_name, plot_full_matrix=True, plot_mll=True)
-
-    p_values = [1.0,0.9,0.8,0.7,0.6]
-    utils_plot.plot_credibility_interval(p_values, file_name, n=n, n_values=4)
+    p_values = [1.0, 0.9, 0.8, 0.7, 0.6]
+    if args.Tn == 1e-2: # plot MAP for different l_p norms
+        for p_value in p_values:
+            print(f"p = {p_value}")
+            p = S_torch.new_ones(1) * p_value
+            utils_plot.plot_full_comparison(flow, S=S_torch, P=P, Q=Q, n=n, T=args.Tn, p=p, lambda_min=args.lambda_min,
+                                            lambda_max=args.lambda_max, file_name=file_name, plot_full_matrix=True, plot_mll=True)
+    elif args.Tn == 1.:
+            utils_plot.plot_credibility_interval(p_values, file_name, n=n, n_values=4)
 
 if __name__ == "__main__":
     main()

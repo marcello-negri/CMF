@@ -162,42 +162,42 @@ def plot_W_comparison(W_mean, W_std, W_sklearn, lambdas, p, T, off_diagonal=True
             plt.savefig(f"{folder_name}W_lambda_p{p.item():.2f}_T{T:.3f}_{i}.png", dpi=200, bbox_inches='tight')
             plt.close()
 
-    # # compute norms
-    # W_tril_norm = np.power(np.power(np.abs(W_tril_mean), p).sum(1), 1./p)
-    # W_tril_norm /= W_tril_norm.max()
-    # W_tril_norm_sorted_idx = W_tril_norm.argsort()
-    # W_tril_norm = W_tril_norm[W_tril_norm_sorted_idx]
-    # W_tril_norm_mean = W_tril_mean[W_tril_norm_sorted_idx]
-    # W_tril_norm_std = W_tril_std[W_tril_norm_sorted_idx]
-    #
-    # sklearn_norm = np.power(np.power(np.abs(W_tril_sklearn), p).sum(1), 1./p)
-    # sklearn_norm /= sklearn_norm.max()
-    # sklearn_sorted_idx = sklearn_norm.argsort()
-    # sklearn_norm = sklearn_norm[sklearn_sorted_idx]
-    # sklearn_sorted = W_tril_sklearn[sklearn_sorted_idx]
-    #
-    # for i in range(n_plots):
-    #     fig, ax = plt.subplots()
-    #     with sns.axes_style("darkgrid"):
-    #         for j in range(i * n_lines, (i + 1) * n_lines):
-    #             if j == W_tril_mean.shape[1]:
-    #                 break
-    #             std, mean = W_tril_norm_std[:, j], W_tril_norm_mean[:, j]
-    #             color = clrs[j % n_lines]
-    #             ax.plot(W_tril_norm, mean, label=r'W_' + str(j), c=color, alpha=0.7)
-    #             ax.plot(W_tril_norm, mean, c=color, alpha=0.7, linewidth=1.5)
-    #             ax.fill_between(W_tril_norm, mean - 2 * std, mean + 2 * std, alpha=0.2, facecolor=color)
-    #             ax.plot(sklearn_norm, sklearn_sorted[:, j], linestyle='--', linewidth=1.5, c=color, alpha=0.7)
-    #
-    #         ax.set_xscale('log')
-    #         plt.xlabel(r'$|W|/max(|W|)$', fontsize=18)
-    #         plt.ylabel(r'$W$', fontsize=18)
-    #         plt.xlim([W_tril_norm.min(), W_tril_norm.max()])
-    #         plt.locator_params(axis='y', nbins=4)
-    #         plt.xticks(fontsize=12)
-    #         plt.yticks(fontsize=12)
-    #         plt.savefig(f"{folder_name}W_norm_p{p.item():.2f}_T{T:.3f}_{i}.png", dpi=200, bbox_inches='tight')
-    #         plt.close()
+    # compute norms
+    W_tril_norm = np.power(np.power(np.abs(W_tril_mean), p).sum(1), 1./p)
+    W_tril_norm /= W_tril_norm.max()
+    W_tril_norm_sorted_idx = W_tril_norm.argsort()
+    W_tril_norm = W_tril_norm[W_tril_norm_sorted_idx]
+    W_tril_norm_mean = W_tril_mean[W_tril_norm_sorted_idx]
+    W_tril_norm_std = W_tril_std[W_tril_norm_sorted_idx]
+
+    sklearn_norm = np.power(np.power(np.abs(W_tril_sklearn), p).sum(1), 1./p)
+    sklearn_norm /= sklearn_norm.max()
+    sklearn_sorted_idx = sklearn_norm.argsort()
+    sklearn_norm = sklearn_norm[sklearn_sorted_idx]
+    sklearn_sorted = W_tril_sklearn[sklearn_sorted_idx]
+
+    for i in range(n_plots):
+        fig, ax = plt.subplots()
+        with sns.axes_style("darkgrid"):
+            for j in range(i * n_lines, (i + 1) * n_lines):
+                if j == W_tril_mean.shape[1]:
+                    break
+                std, mean = W_tril_norm_std[:, j], W_tril_norm_mean[:, j]
+                color = clrs[j % n_lines]
+                ax.plot(W_tril_norm, mean, label=r'W_' + str(j), c=color, alpha=0.7)
+                ax.plot(W_tril_norm, mean, c=color, alpha=0.7, linewidth=1.5)
+                ax.fill_between(W_tril_norm, mean - 2 * std, mean + 2 * std, alpha=0.2, facecolor=color)
+                ax.plot(sklearn_norm, sklearn_sorted[:, j], linestyle='--', linewidth=1.5, c=color, alpha=0.7)
+
+            ax.set_xscale('log')
+            plt.xlabel(r'$|W|/max(|W|)$', fontsize=18)
+            plt.ylabel(r'$W$', fontsize=18)
+            plt.xlim([W_tril_norm.min(), W_tril_norm.max()])
+            plt.locator_params(axis='y', nbins=4)
+            plt.xticks(fontsize=12)
+            plt.yticks(fontsize=12)
+            plt.savefig(f"{folder_name}W_norm_p{p.item():.2f}_T{T:.3f}_{i}.png", dpi=200, bbox_inches='tight')
+            plt.close()
 
 def plot_W_fixed_p (flow, S, p, T, lamb_min, lamb_max, X_train, n_plots=3):
     n = X_train.shape[0]

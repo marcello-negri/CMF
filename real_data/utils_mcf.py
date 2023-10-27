@@ -402,6 +402,8 @@ def compute_glasso_solution(S, alpha_sorted, folder_name=None):
         with open(folder_name+file_name, 'rb') as f:
             sol_dict = pickle.load(f)
     else:
+        print("Computing the frequentist solution (GLasso) for the full matrix. This might take a while...")
+        print("Once computed it is saved and just loaded in following runs")
         glasso_solution = np.array([ADMM_SGL(S.detach().cpu().numpy(), lamb * 0.5, np.eye(S.shape[0]))[0]['Theta'] for lamb in tqdm.tqdm(alpha_sorted)])
         sol_dict = dict(W=glasso_solution, alphas=alpha_sorted)
         with open(folder_name+file_name, 'wb') as fp:
